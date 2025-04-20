@@ -1,0 +1,14 @@
+__pycache__/
+
+pip-log.txt
+pip-delete-this-directory.txt
+.cache
+local_settings.py
+ipython_config.py
+Pipfile.lock
+!data_files/.gitkeep
+test.py
+analysis.ipynb
+.mypy_cache/
+.dmypy.json
+dmypy.json

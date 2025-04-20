@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div class="content-section">
+        <form method="POST" action="">
+            {{ form.hidden_tag() }}
+            <fieldset class="form-group">
+                <legend class="border-bottom mb-4">Subscribe to Our Newsletter</legend>
+                <div class="form-group">
+                    {{ form.email.label(class="form-control-label") }}
+                    {% if form.email.errors %}
+                        {{ form.email(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.email.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.email(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.name.label(class="form-control-label") }}
+                    {% if form.name.errors %}
+                        {{ form.name(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.name.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.name(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+            </fieldset>
+            <div class="form-group">
+                {{ form.submit(class="btn btn-outline-info") }}
+            </div>
+        </form>
+    </div>
+    <div class="content-section">
+        <h3>Why Subscribe?</h3>
+        <ul class="list-group">
+            <li class="list-group-item list-group-item-light">
+                <i class="fas fa-bell"></i> Get notified about new posts
+            </li>
+            <li class="list-group-item list-group-item-light">
+                <i class="fas fa-star"></i> Exclusive content and updates
+            </li>
+            <li class="list-group-item list-group-item-light">
+                <i class="fas fa-envelope"></i> Weekly digest of the best content
+            </li>
+            <li class="list-group-item list-group-item-light">
+                <i class="fas fa-user-shield"></i> Your data is safe with us
+            </li>
+        </ul>
+    </div>
+{% endblock content %} 

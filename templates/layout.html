@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if title %}
+        <title>Flask Blog - {{title }}</title>
+    {% else %}
+        <title>Flask Blog</title>
+    {% endif %}
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='main.css') }}">
+  </head>
+<body>
+    <header class="site-header">
+      <nav class="navbar navbar-expand-md navbar-dark bg-steel fixed-top">
+        <div class="container">
+          <a class="navbar-brand mr-4" href="{{ url_for('home') }}">Flask Blog</a>
+          <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarToggle" aria-controls="navbarToggle" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarToggle">
+            <div class="navbar-nav mr-auto">
+              <a class="nav-item nav-link" href="{{ url_for('home') }}">Home</a>
+              <a class="nav-item nav-link" href="{{ url_for('about') }}">About</a>
+              {% if current_user.is_authenticated %}
+                <a class="nav-item nav-link" href="{{ url_for('new_post') }}">New Post</a>
+              {% endif %}
+            </div>
+            <!-- Navbar Right Side -->
+            <div class="navbar-nav">
+              {% if current_user.is_authenticated %}
+                {% if current_user.is_admin %}
+                  <a class="nav-item nav-link" href="{{ url_for('admin.index') }}">Admin</a>
+                {% endif %}
+                <a class="nav-item nav-link" href="{{ url_for('account') }}">Account</a>
+                <a class="nav-item nav-link position-relative" href="{{ url_for('notifications') }}">
+                    <i class="fas fa-bell"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-count" style="display: none;">
+                        0
+                    </span>
+                </a>
+                <a class="nav-item nav-link" href="{{ url_for('logout') }}">Logout</a>
+              {% else %}
+                <a class="nav-item nav-link" href="{{ url_for('login') }}">Login</a>
+                <a class="nav-item nav-link" href="{{ url_for('register') }}">Register</a>
+              {% endif %}
+              <form class="d-flex ms-3" action="{{ url_for('search') }}" method="get">
+                <input class="form-control me-2" type="search" placeholder="Search posts..." name="q" aria-label="Search">
+                <button class="btn btn-outline-light" type="submit">Search</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <main role="main" class="container">
+      <div class="row">
+        <div class="col-md-8">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+              {% endfor %}
+            {% endif %}
+          {% endwith %}
+          {% block content %}{% endblock %}
+        </div>
+        <div class="col-md-4">
+          <div class="content-section">
+            <h3>Blog Sidebar</h3>
+            <p class='text-muted'>
+                <ul class="list-group">
+                    <li class="list-group-item list-group-item-light">
+                        <i class="fas fa-chart-bar"></i> Statistics
+                        <ul class="list-unstyled mt-2">
+                            <li>Total Posts: {{ total_posts }}</li>
+                            {% if current_user.is_authenticated %}
+                                <li>Your Posts: {{ user_post_count }}</li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    <li class="list-group-item list-group-item-light">
+                        <i class="fas fa-folder"></i> Categories
+                        <ul class="list-group mt-2">
+                            {% for category in categories %}
+                           
+                              <a href="{{ url_for('category_posts', category_id=category.id) }}" class="text-dark">
+                                <li class="list-group-item list-group-item-light"> {{ category.name }}</li>
+                                       
+                              </a>
+                            
+                            {% endfor %}
+                        </ul>
+                    </li>
+                    <li class="list-group-item list-group-item-light">
+                        <i class="fas fa-tags"></i> Popular Tags
+                        <div class="list-group-item">
+                          <div class="tag-cloud">
+                            {% for tag in tags %}
+                            <a href="{{ url_for('tag_posts', tag_name=tag.name) }}" 
+                               class="tag-cloud-item badge badge-secondary"
+                               style="font-size: {{ 0.8 + tag.posts|length * 0.1 }}rem">
+                              {{ tag.name }}
+                              <span class="badge badge-light">{{ tag.posts|length }}</span>
+                            </a>
+                            {% endfor %}
+                          </div>
+                        </div>
+                    </li>
+                    <li class="list-group-item list-group-item-light">
+                        <i class="fas fa-fire"></i> Popular Posts
+                        <ul class="list-unstyled mt-2">
+                            {% for post in popular_posts %}
+                                <li>
+                                    <a href="{{ url_for('post', post_id=post.id) }}" class="text-dark">
+                                        {{ post.title }}
+                                        <small class="text-muted d-block">{{ post.views }} views</small>
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </li>
+                </ul>
+            </p>
+          </div>
+          <div class="content-section">
+            <h3>Recent Posts</h3>
+            {% if current_user.is_authenticated %}
+              <p class='text-muted'>Here are your recent posts: <span class="badge bg-info rounded-pill">{{ user_post_count }}</span></p>
+              <ul class="list-group">
+                {% for post in current_user.posts[:3] %}
+                  <li class="list-group-item list-group-item-light">
+                    <a href="{{ url_for('post', post_id=post.id) }}" class="article-title">{{ post.title }}</a>
+                    <small class="text-muted">{{ post.date_posted.strftime('%Y-%m-%d') }}</small>
+                  </li>
+                {% else %}
+                  <li class="list-group-item list-group-item-light">No posts yet</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class='text-muted'>Please log in to see your recent posts.</p>
+            {% endif %}
+          </div>
+          
+          <div class="content-section">
+            <h3>Newsletter</h3>
+            <p class='text-muted'>Stay updated with our latest posts!</p>
+            <form action="{{ url_for('subscribe_newsletter') }}" method="post" class="newsletter-form">
+              <div class="input-group mb-3">
+                <input type="email" name="email" class="form-control" placeholder="Your email" required>
+                <button class="btn btn-outline-secondary" type="submit">
+                  <i class="fas fa-paper-plane"></i>
+                </button>
+              </div>
+              <small class="text-muted">
+                <a href="{{ url_for('subscribe_newsletter') }}">More options</a>
+              </small>
+            </form>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js" integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+" crossorigin="anonymous"></script>
+    {% block scripts %}{% endblock scripts %}
+    {% if current_user.is_authenticated %}
+    <script>
+        // Function to update notification count
+        function updateNotificationCount() {
+            fetch("{{ url_for('notification_count') }}")
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.querySelector('.notification-count');
+                    if (data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                });
+        }
+        
+        // Update count when page loads
+        updateNotificationCount();
+        
+        // Update count every 30 seconds
+        setInterval(updateNotificationCount, 30000);
+    </script>
+    {% endif %}
+</body>
+</html>

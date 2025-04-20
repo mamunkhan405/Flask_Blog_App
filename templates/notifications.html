@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="content-section">
+    <h2 class="mb-4">Notifications</h2>
+    
+    {% if notifications.items %}
+        {% for notification in notifications.items %}
+            <div class="media content-section mb-3 {% if not notification.is_read %}bg-light{% endif %}">
+                <img class="rounded-circle mr-3" src="{{ url_for('static', filename='profile_pics/' + notification.sender.image_file) }}" style="width: 40px; height: 40px;">
+                <div class="media-body">
+                    <div class="notification-content">
+                        <a href="{{ url_for('user_profile', username=notification.sender.username) }}">{{ notification.sender.username }}</a>
+                        {{ notification.content }}
+                        <small class="text-muted ml-2">{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                    <div class="mt-2">
+                        <a href="{{ url_for('post', post_id=notification.post_id) }}" class="btn btn-sm btn-outline-info">View Post</a>
+                        {% if notification.comment_id %}
+                            <a href="{{ url_for('post', post_id=notification.post_id) }}#comment-{{ notification.comment_id }}" class="btn btn-sm btn-outline-secondary">View Comment</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+        
+        <!-- Pagination -->
+        {% for page_num in notifications.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+            {% if page_num %}
+                {% if notifications.page == page_num %}
+                    <a class="btn btn-info mb-4" href="{{ url_for('notifications', page=page_num) }}">{{ page_num }}</a>
+                {% else %}
+                    <a class="btn btn-outline-info mb-4" href="{{ url_for('notifications', page=page_num) }}">{{ page_num }}</a>
+                {% endif %}
+            {% else %}
+                ...
+            {% endif %}
+        {% endfor %}
+    {% else %}
+        <p class="text-muted">No notifications yet.</p>
+    {% endif %}
+</div>
+{% endblock content %} 
