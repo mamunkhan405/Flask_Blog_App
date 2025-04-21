@@ -1,0 +1,83 @@
+{% extends 'admin/master.html' %}
+
+{% block head %}
+    {{ super() }}
+    <style>
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .errors {
+            list-style: none;
+            padding-left: 0;
+            margin-top: 0.5rem;
+        }
+        .form-control:focus {
+            border-color: #4e73df;
+            box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+        }
+        .form-label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            {% if model %}
+                                Edit {{ admin_view.name }}
+                            {% else %}
+                                Create {{ admin_view.name }}
+                            {% endif %}
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="" method="POST" role="form" class="admin-form">
+                            {{ form.csrf_token }}
+                            {% for field in form if field.name != 'csrf_token' and field.name != 'submit' %}
+                            <div class="form-group">
+                                {{ field.label(class='form-label') }}
+                                {% if field.type == 'SelectField' %}
+                                    {{ field(class='form-control') }}
+                                {% elif field.type == 'TextAreaField' %}
+                                    {{ field(class='form-control', rows='5') }}
+                                {% else %}
+                                    {{ field(class='form-control') }}
+                                {% endif %}
+                                {% if field.errors %}
+                                <ul class="errors">
+                                    {% for error in field.errors %}
+                                    <li class="text-danger">{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+                                {% if field.description %}
+                                <small class="form-text text-muted">{{ field.description }}</small>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            <div class="form-group mt-3">
+                                <input type="submit" class="btn btn-primary" value="Save" />
+                                {% if admin_view.can_delete and model %}
+                                <form action="{{ url_for(admin_view.endpoint + '.delete_view') }}" method="POST" class="d-inline">
+                                    {{ form.csrf_token }}
+                                    <input type="hidden" name="id" value="{{ model.id }}">
+                                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this {{ admin_view.name }}?');">
+                                        Delete
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <a href="{{ return_url }}" class="btn btn-secondary">Cancel</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %} 

@@ -1,0 +1,46 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Create {{ admin_view.name }}</h6>
+                </div>
+                <div class="card-body">
+                    <form action="" method="POST" role="form" class="admin-form">
+                        {{ form.csrf_token }}
+                        {% for field in form if field.name != 'csrf_token' and field.name != 'submit' %}
+                        <div class="form-group">
+                            {{ field.label(class='form-label') }}
+                            {% if field.type == 'SelectField' %}
+                                {{ field(class='form-control') }}
+                            {% elif field.type == 'TextAreaField' %}
+                                {{ field(class='form-control', rows='5') }}
+                            {% else %}
+                                {{ field(class='form-control') }}
+                            {% endif %}
+                            {% if field.errors %}
+                            <ul class="errors">
+                                {% for error in field.errors %}
+                                <li class="text-danger">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                            {% if field.description %}
+                            <small class="form-text text-muted">{{ field.description }}</small>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                        <div class="form-group mt-3">
+                            <input type="submit" class="btn btn-primary" value="Create" />
+                            <a href="{{ return_url }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

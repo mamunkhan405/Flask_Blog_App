@@ -1,181 +1,65 @@
 {% extends "layout.html" %}
+
 {% block content %}
-<div class="content-section">
+<div class="container mt-4">
     <div class="row">
-        <div class="col-md-4 text-center">
-            <img class="rounded-circle account-img" src="{{ url_for('static', filename='profile_pics/' + user.image_file) }}" style="width: 150px; height: 150px;">
-            <h2 class="account-heading mt-3">{{ user.username }}</h2>
-            <p class="text-secondary">{{ user.email }}</p>
-            
-            {% if user != current_user %}
-                {% if current_user.is_authenticated %}
-                    {% if not current_user.is_following(user) %}
-                        <a href="{{ url_for('follow', username=user.username) }}" class="btn btn-primary mt-2">Follow</a>
-                    {% else %}
-                        <a href="{{ url_for('unfollow', username=user.username) }}" class="btn btn-secondary mt-2">Unfollow</a>
+        <div class="col-md-4">
+            <div class="card">
+                <img src="{{ url_for('static', filename='profile_pics/' + user.image_file) }}" class="card-img-top" alt="{{ user.username }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ user.username }}</h5>
+                    <p class="card-text">{{ user.bio or 'No bio available' }}</p>
+                    <div class="row text-center">
+                        <div class="col">
+                            <h4>{{ user.followers_list.count() }}</h4>
+                            <small class="text-muted">Followers</small>
+                        </div>
+                        <div class="col">
+                            <h4>{{ user.following.count() }}</h4>
+                            <small class="text-muted">Following</small>
+                        </div>
+                    </div>
+                    {% if current_user.is_authenticated and current_user != user %}
+                        {% if current_user.is_following(user) %}
+                            <a href="{{ url_for('unfollow', username=user.username) }}" class="btn btn-danger btn-block mt-3">Unfollow</a>
+                        {% else %}
+                            <a href="{{ url_for('follow', username=user.username) }}" class="btn btn-primary btn-block mt-3">Follow</a>
+                        {% endif %}
                     {% endif %}
-                {% else %}
-                    <a href="{{ url_for('login') }}" class="btn btn-outline-primary mt-2">Login to Follow</a>
-                {% endif %}
-            {% else %}
-                <a href="{{ url_for('account') }}" class="btn btn-outline-info mt-2">Edit Profile</a>
-            {% endif %}
+                </div>
+            </div>
         </div>
         <div class="col-md-8">
-            <div class="user-stats mb-4">
-                <div class="row text-center">
-                    <div class="col">
-                        <h4>{{ user.posts|length }}</h4>
-                        <small class="text-muted">Posts</small>
-                    </div>
-                    <div class="col">
-                        <h4>{{ user.followers.count() }}</h4>
-                        <small class="text-muted">Followers</small>
-                    </div>
-                    <div class="col">
-                        <h4>{{ user.following.count() }}</h4>
-                        <small class="text-muted">Following</small>
+            <h3>Posts by {{ user.username }}</h3>
+            {% for post in posts.items %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ post.title }}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Posted on {{ post.date_posted.strftime('%Y-%m-%d') }}</h6>
+                        <p class="card-text">{{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}</p>
+                        <a href="{{ url_for('post', post_id=post.id) }}" class="btn btn-primary">Read More</a>
                     </div>
                 </div>
-            </div>
+            {% else %}
+                <p>No posts yet.</p>
+            {% endfor %}
             
-            {% if user.bio %}
-                <div class="user-bio mb-4">
-                    <h5>About</h5>
-                    <p class="text-muted">{{ user.bio }}</p>
-                </div>
+            {% if posts.pages > 1 %}
+                <nav aria-label="Page navigation">
+                    <ul class="pagination">
+                        {% for page_num in posts.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == posts.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('user_profile', username=user.username, page=page_num) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </nav>
             {% endif %}
-            
-            <div class="user-info">
-                {% if user.location %}
-                    <p><i class="fas fa-map-marker-alt"></i> {{ user.location }}</p>
-                {% endif %}
-                {% if user.website %}
-                    <p><i class="fas fa-link"></i> <a href="{{ user.website }}" target="_blank">{{ user.website }}</a></p>
-                {% endif %}
-                {% if user.twitter %}
-                    <p><i class="fab fa-twitter"></i> <a href="https://twitter.com/{{ user.twitter }}" target="_blank">@{{ user.twitter }}</a></p>
-                {% endif %}
-                {% if user.github %}
-                    <p><i class="fab fa-github"></i> <a href="https://github.com/{{ user.github }}" target="_blank">{{ user.github }}</a></p>
-                {% endif %}
-                <p><i class="fas fa-calendar-alt"></i> Joined {{ user.joined_at.strftime('%B %Y') }}</p>
-            </div>
         </div>
     </div>
 </div>
-
-<!-- Tabs Navigation -->
-<ul class="nav nav-tabs mt-4" id="profileTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="posts-tab" data-bs-toggle="tab" data-bs-target="#posts" type="button" role="tab" aria-controls="posts" aria-selected="true">Posts</button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="comments-tab" data-bs-toggle="tab" data-bs-target="#comments" type="button" role="tab" aria-controls="comments" aria-selected="false">Comments</button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="likes-tab" data-bs-toggle="tab" data-bs-target="#likes" type="button" role="tab" aria-controls="likes" aria-selected="false">Likes</button>
-    </li>
-</ul>
-
-<!-- Tabs Content -->
-<div class="tab-content mt-3" id="profileTabsContent">
-    <!-- Posts Tab -->
-    <div class="tab-pane fade show active" id="posts" role="tabpanel" aria-labelledby="posts-tab">
-        <h3 class="mb-4">{{ user.username }}'s Posts</h3>
-        {% if posts.items %}
-            {% for post in posts.items %}
-                <article class="media content-section mb-4">
-                    <img class="rounded-circle article-img" src="{{ url_for('static', filename='profile_pics/' + post.author.image_file) }}">
-                    <div class="media-body">
-                        <div class="article-metadata">
-                            <a class="mr-2" href="{{ url_for('user_profile', username=post.author.username) }}">{{ post.author.username }}</a>
-                            <small class="text-muted">{{ post.date_posted.strftime('%Y-%m-%d') }}</small>
-                        </div>
-                        <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
-                        <p class="article-content">{{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}</p>
-                        {% if post.image_file %}
-                            <img src="{{ url_for('static', filename='post_pics/' + post.image_file) }}" class="img-fluid mb-3" alt="Post image">
-                        {% endif %}
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="text-muted"><i class="fas fa-eye"></i> {{ post.views }} views</span>
-                                <span class="text-muted ml-3"><i class="fas fa-heart"></i> {{ post.like_count }} likes</span>
-                                <span class="text-muted ml-3"><i class="fas fa-comment"></i> {{ post.comments|length }} comments</span>
-                            </div>
-                            <a href="{{ url_for('post', post_id=post.id) }}" class="btn btn-outline-info btn-sm">Read More</a>
-                        </div>
-                    </div>
-                </article>
-            {% endfor %}
-            
-            <!-- Pagination for Posts -->
-            {% for page_num in posts.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
-                {% if page_num %}
-                    {% if posts.page == page_num %}
-                        <a class="btn btn-info mb-4" href="{{ url_for('user_profile', username=user.username, page=page_num) }}">{{ page_num }}</a>
-                    {% else %}
-                        <a class="btn btn-outline-info mb-4" href="{{ url_for('user_profile', username=user.username, page=page_num) }}">{{ page_num }}</a>
-                    {% endif %}
-                {% else %}
-                    ...
-                {% endif %}
-            {% endfor %}
-        {% else %}
-            <p class="text-muted">No posts yet.</p>
-        {% endif %}
-    </div>
-    
-    <!-- Comments Tab -->
-    <div class="tab-pane fade" id="comments" role="tabpanel" aria-labelledby="comments-tab">
-        <h3 class="mb-4">{{ user.username }}'s Comments</h3>
-        {% if user.comments %}
-            {% for comment in user.comments %}
-                <div class="media content-section mb-3">
-                    <img class="rounded-circle mr-3" src="{{ url_for('static', filename='profile_pics/' + comment.author.image_file) }}" style="width: 40px; height: 40px;">
-                    <div class="media-body">
-                        <div class="comment-metadata">
-                            <a class="mr-2" href="{{ url_for('user_profile', username=comment.author.username) }}">{{ comment.author.username }}</a>
-                            <small class="text-muted">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
-                        </div>
-                        <p class="comment-content">{{ comment.content }}</p>
-                        <small class="text-muted">On post: <a href="{{ url_for('post', post_id=comment.post_id) }}">{{ comment.post.title }}</a></small>
-                    </div>
-                </div>
-            {% endfor %}
-        {% else %}
-            <p class="text-muted">No comments yet.</p>
-        {% endif %}
-    </div>
-    
-    <!-- Likes Tab -->
-    <div class="tab-pane fade" id="likes" role="tabpanel" aria-labelledby="likes-tab">
-        <h3 class="mb-4">{{ user.username }}'s Liked Posts</h3>
-        {% if user.likes %}
-            {% for like in user.likes %}
-                <article class="media content-section mb-4">
-                    <img class="rounded-circle article-img" src="{{ url_for('static', filename='profile_pics/' + like.post.author.image_file) }}">
-                    <div class="media-body">
-                        <div class="article-metadata">
-                            <a class="mr-2" href="{{ url_for('user_profile', username=like.post.author.username) }}">{{ like.post.author.username }}</a>
-                            <small class="text-muted">{{ like.post.date_posted.strftime('%Y-%m-%d') }}</small>
-                        </div>
-                        <h2><a class="article-title" href="{{ url_for('post', post_id=like.post.id) }}">{{ like.post.title }}</a></h2>
-                        <p class="article-content">{{ like.post.content[:200] }}{% if like.post.content|length > 200 %}...{% endif %}</p>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="text-muted"><i class="fas fa-eye"></i> {{ like.post.views }} views</span>
-                                <span class="text-muted ml-3"><i class="fas fa-heart"></i> {{ like.post.like_count }} likes</span>
-                                <span class="text-muted ml-3"><i class="fas fa-comment"></i> {{ like.post.comments|length }} comments</span>
-                            </div>
-                            <a href="{{ url_for('post', post_id=like.post.id) }}" class="btn btn-outline-info btn-sm">Read More</a>
-                        </div>
-                    </div>
-                </article>
-            {% endfor %}
-        {% else %}
-            <p class="text-muted">No liked posts yet.</p>
-        {% endif %}
-    </div>
-</div>
-{% endblock content %} 
+{% endblock %} 

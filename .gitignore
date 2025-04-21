@@ -6,6 +6,7 @@ pip-delete-this-directory.txt
 local_settings.py
 ipython_config.py
 Pipfile.lock
+Pipfile
 !data_files/.gitkeep
 test.py
 analysis.ipynb

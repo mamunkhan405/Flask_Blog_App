@@ -1,81 +1,75 @@
-{% extends "admin/base.html" %}
+{% extends 'admin/base.html' %}
 
-{% block title %}Admin Dashboard{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Page Header -->
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
-        <a href="{{ url_for('admin.new_post') }}" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm">
-            <i class="fas fa-plus fa-sm text-white-50"></i> New Post
-        </a>
-    </div>
+    <h1 class="h3 mb-4 text-gray-800">Dashboard</h1>
 
-    <!-- Stats Cards -->
+    <!-- Overview Cards -->
     <div class="row">
-        <!-- Posts Card -->
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card bg-primary h-100 py-2">
+            <div class="card border-left-primary shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
-                            <div class="stats-text text-white-50">Total Posts</div>
-                            <div class="stats-number text-white">{{ stats.posts_count }}</div>
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Posts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.total_posts }}</div>
                         </div>
                         <div class="col-auto">
-                            <i class="fas fa-file-alt fa-2x text-white-50"></i>
+                            <i class="fas fa-file-alt fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Comments Card -->
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card bg-success h-100 py-2">
+            <div class="card border-left-success shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
-                            <div class="stats-text text-white-50">Total Comments</div>
-                            <div class="stats-number text-white">{{ stats.comments_count }}</div>
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Users</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.total_users }}</div>
                         </div>
                         <div class="col-auto">
-                            <i class="fas fa-comments fa-2x text-white-50"></i>
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Users Card -->
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card bg-info h-100 py-2">
+            <div class="card border-left-info shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
-                            <div class="stats-text text-white-50">Total Users</div>
-                            <div class="stats-number text-white">{{ stats.users_count }}</div>
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Total Comments</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.total_comments }}</div>
                         </div>
                         <div class="col-auto">
-                            <i class="fas fa-users fa-2x text-white-50"></i>
+                            <i class="fas fa-comments fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Views Card -->
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card bg-warning h-100 py-2">
+            <div class="card border-left-warning shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
-                            <div class="stats-text text-white-50">Total Views</div>
-                            <div class="stats-number text-white">{{ stats.total_views }}</div>
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Newsletter Subscribers</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.total_subscribers }}</div>
                         </div>
                         <div class="col-auto">
-                            <i class="fas fa-eye fa-2x text-white-50"></i>
+                            <i class="fas fa-envelope fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>
@@ -85,8 +79,11 @@
 
     <!-- Recent Posts -->
     <div class="card shadow mb-4">
-        <div class="card-header py-3">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
             <h6 class="m-0 font-weight-bold text-primary">Recent Posts</h6>
+            <a href="{{ url_for('post.create_view') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus"></i> Add New Post
+            </a>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -107,58 +104,25 @@
                         <tr>
                             <td>{{ post.title }}</td>
                             <td>{{ post.author.username }}</td>
-                            <td>{{ post.category.name }}</td>
+                            <td>{{ post.category.name if post.category else 'Uncategorized' }}</td>
                             <td>
                                 <span class="badge {% if post.status == 'published' %}bg-success{% else %}bg-warning{% endif %}">
                                     {{ post.status }}
                                 </span>
                             </td>
                             <td>{{ post.views }}</td>
-                            <td>{{ post.created_at.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ post.date_posted.strftime('%Y-%m-%d') }}</td>
                             <td class="action-buttons">
-                                <a href="{{ url_for('admin.edit_post', post_id=post.id) }}" class="btn btn-sm btn-info">
+                                <a href="{{ url_for('post.edit_view', id=post.id) }}" class="btn btn-sm btn-info">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <button class="btn btn-sm btn-danger delete-post" data-post-id="{{ post.id }}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Comments -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary">Recent Comments</h6>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-bordered" width="100%" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Comment</th>
-                            <th>Post</th>
-                            <th>Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for comment in recent_comments %}
-                        <tr>
-                            <td>{{ comment.author.username }}</td>
-                            <td>{{ comment.content[:100] }}{% if comment.content|length > 100 %}...{% endif %}</td>
-                            <td>{{ comment.post.title }}</td>
-                            <td>{{ comment.created_at.strftime('%Y-%m-%d') }}</td>
-                            <td class="action-buttons">
-                                <button class="btn btn-sm btn-danger delete-comment" data-comment-id="{{ comment.id }}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <form action="{{ url_for('post.delete_view') }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="id" value="{{ post.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this post?');">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -168,76 +132,4 @@
         </div>
     </div>
 </div>
-
-<!-- Delete Post Modal -->
-<div class="modal fade" id="deletePostModal" tabindex="-1" role="dialog" aria-labelledby="deletePostModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="deletePostModalLabel">Delete Post</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                Are you sure you want to delete this post? This action cannot be undone.
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form id="deletePostForm" method="POST" style="display: inline;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger">Delete</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Comment Modal -->
-<div class="modal fade" id="deleteCommentModal" tabindex="-1" role="dialog" aria-labelledby="deleteCommentModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="deleteCommentModalLabel">Delete Comment</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                Are you sure you want to delete this comment? This action cannot be undone.
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form id="deleteCommentForm" method="POST" style="display: inline;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger">Delete</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle post deletion
-    document.querySelectorAll('.delete-post').forEach(button => {
-        button.addEventListener('click', function() {
-            const postId = this.getAttribute('data-post-id');
-            const modal = new bootstrap.Modal(document.getElementById('deletePostModal'));
-            const form = document.getElementById('deletePostForm');
-            form.action = `/admin/post/${postId}/delete`;
-            modal.show();
-        });
-    });
-
-    // Handle comment deletion
-    document.querySelectorAll('.delete-comment').forEach(button => {
-        button.addEventListener('click', function() {
-            const commentId = this.getAttribute('data-comment-id');
-            const modal = new bootstrap.Modal(document.getElementById('deleteCommentModal'));
-            const form = document.getElementById('deleteCommentForm');
-            form.action = `/admin/comment/${commentId}/delete`;
-            modal.show();
-        });
-    });
-});
-</script>
 {% endblock %} 

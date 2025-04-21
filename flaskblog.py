@@ -2,26 +2,35 @@ from flask import Flask, render_template, url_for, flash, redirect, request, abo
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, current_user, logout_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_wtf import FlaskForm
+from flask_wtf import FlaskForm, CSRFProtect
 from flask_wtf.file import FileField, FileAllowed
-from wtforms import StringField, PasswordField, SubmitField, TextAreaField, BooleanField, SelectField, DateTimeField, HiddenField
+from wtforms import StringField, PasswordField, SubmitField, TextAreaField, BooleanField, SelectField, DateTimeField, HiddenField, EmailField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional
 import os
 import secrets
 from PIL import Image
 from datetime import datetime
-from flask_admin import Admin, AdminIndexView
+from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
 from functools import wraps
+from slugify import slugify
+from markupsafe import Markup
+from flask_wtf.csrf import generate_csrf
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 db = SQLAlchemy(app)
+csrf = CSRFProtect(app)
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'info'
+
+# Add template context processor for csrf_token
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=lambda: generate_csrf())
 
 # User model
 class User(db.Model, UserMixin):
@@ -52,7 +61,7 @@ class User(db.Model, UserMixin):
         'User', secondary=followers,
         primaryjoin=(followers.c.follower_id == id),
         secondaryjoin=(followers.c.followed_id == id),
-        backref=db.backref('followers', lazy='dynamic'), lazy='dynamic'
+        backref=db.backref('followers_list', lazy='dynamic'), lazy='dynamic'
     )
 
     def __repr__(self):
@@ -77,7 +86,7 @@ class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.String(200))
-    posts = db.relationship('Post', backref='category', lazy=True)
+    slug = db.Column(db.String(50), unique=True)
 
     def __repr__(self):
         return f"Category('{self.name}')"
@@ -91,6 +100,8 @@ post_tags = db.Table('post_tags',
 class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.String(200))
+    slug = db.Column(db.String(50), unique=True)
     posts = db.relationship('Post', secondary=post_tags, backref=db.backref('tags', lazy='dynamic'))
 
     def __repr__(self):
@@ -102,6 +113,7 @@ class Newsletter(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=True)
     subscribed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     confirmation_token = db.Column(db.String(100), unique=True, nullable=True)
     is_confirmed = db.Column(db.Boolean, default=False)
@@ -118,6 +130,7 @@ class Post(db.Model):
     image_file = db.Column(db.String(20), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=True)
+    category = db.relationship('Category', backref=db.backref('posts', lazy=True))
     views = db.Column(db.Integer, default=0)
     status = db.Column(db.String(20), default='published')  # published, draft, scheduled
     publish_date = db.Column(db.DateTime)
@@ -259,6 +272,11 @@ class PostForm(FlaskForm):
     def __init__(self, *args, **kwargs):
         super(PostForm, self).__init__(*args, **kwargs)
         self.category.choices = [(c.id, c.name) for c in Category.query.order_by('name')]
+
+class CommentForm(FlaskForm):
+    content = TextAreaField('Content', validators=[DataRequired()])
+    parent_id = HiddenField('Parent Comment ID')
+    submit = SubmitField('Post Comment')
 
 def save_picture(form_picture):
     random_hex = secrets.token_hex(8)
@@ -410,6 +428,7 @@ def new_post():
                 tag = Tag.query.filter_by(name=tag_name).first()
                 if not tag:
                     tag = Tag(name=tag_name)
+                    tag.slug = slugify(tag_name)
                     db.session.add(tag)
                 post.tags.append(tag)
         
@@ -468,6 +487,7 @@ def update_post(post_id):
                 tag = Tag.query.filter_by(name=tag_name).first()
                 if not tag:
                     tag = Tag(name=tag_name)
+                    tag.slug = slugify(tag_name)
                     db.session.add(tag)
                 post.tags.append(tag)
         
@@ -509,8 +529,18 @@ class MyAdminIndexView(AdminIndexView):
         return current_user.is_authenticated and current_user.is_admin
 
     def inaccessible_callback(self, name, **kwargs):
-        flash('You must be an admin to access this page.', 'danger')
-        return redirect(url_for('login'))
+        return redirect(url_for('login', next=request.url))
+
+    @expose('/')
+    def index(self):
+        stats = {
+            'total_posts': Post.query.count(),
+            'total_users': User.query.count(),
+            'total_comments': Comment.query.count(),
+            'total_subscribers': Newsletter.query.filter_by(is_confirmed=True).count()
+        }
+        recent_posts = Post.query.order_by(Post.date_posted.desc()).limit(10).all()
+        return self.render('admin/dashboard.html', stats=stats, recent_posts=recent_posts)
 
 # Custom ModelView with authentication
 class SecureModelView(ModelView):
@@ -518,174 +548,163 @@ class SecureModelView(ModelView):
         return current_user.is_authenticated and current_user.is_admin
 
     def inaccessible_callback(self, name, **kwargs):
-        flash('You must be an admin to access this page.', 'danger')
+        flash('You need to be an administrator to access this page.', 'danger')
         return redirect(url_for('login'))
 
+    def _handle_view(self, name, **kwargs):
+        if not self.is_accessible():
+            return self.inaccessible_callback(name, **kwargs)
+
+    # Add default list template
+    list_template = 'admin/model/list.html'
+    # Add default edit template
+    edit_template = 'admin/model/edit.html'
+    # Add default create template
+    create_template = 'admin/model/create.html'
+
 # Admin User Form
-class AdminUserForm(FlaskForm):
+class UserAdminForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
     email = StringField('Email', validators=[DataRequired(), Email()])
-    is_admin = BooleanField('Administrator')
+    password = PasswordField('Password', validators=[Optional(), Length(min=6)])
+    about_me = TextAreaField('About Me')
+    is_admin = BooleanField('Admin')
+    is_active = BooleanField('Active')
 
 class UserAdminView(SecureModelView):
-    column_exclude_list = ['password']
+    column_list = ['username', 'email', 'is_admin', 'joined_at']
     column_searchable_list = ['username', 'email']
-    column_filters = ['username', 'email', 'is_admin']
-    form_excluded_columns = ['password', 'posts', 'image_file']
+    column_filters = ['is_admin']
+    form = UserAdminForm
+    column_labels = {
+        'username': 'Username',
+        'email': 'Email',
+        'is_admin': 'Admin',
+        'joined_at': 'Joined At',
+        'about_me': 'About Me'
+    }
     
-    can_create = True
-    can_edit = True
-    can_delete = True
-    page_size = 50
+    def on_model_change(self, form, model, is_created):
+        if is_created:
+            model.set_password('default123')  # Set a default password for new users
+        elif form.password.data:
+            model.set_password(form.password.data)
 
-    def create_form(self, obj=None):
-        return AdminUserForm(obj=obj)
+class PostAdminForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired(), Length(max=200)])
+    content = TextAreaField('Content', validators=[DataRequired()])
+    category_id = SelectField('Category', coerce=int)
+    status = SelectField('Status', choices=[
+        ('published', 'Published'),
+        ('draft', 'Draft'),
+        ('scheduled', 'Scheduled')
+    ])
+    author = SelectField('Author', coerce=int)
+    
+class PostAdminView(SecureModelView):
+    column_list = ['title', 'author', 'category', 'status', 'content', 'views', 'date_posted']
+    column_filters = ['status', 'author', 'category']
+    column_labels = {
+        'date_posted': 'Created At',
+        'status': 'Status'
+    }
+    form = PostAdminForm
 
-    def edit_form(self, obj=None):
-        return AdminUserForm(obj=obj)
+    def create_form(self):
+        form = super(PostAdminView, self).create_form()
+        form.category_id.choices = [(c.id, c.name) for c in Category.query.order_by('name')]
+        form.author.choices = [(u.id, u.username) for u in User.query.order_by('username')]
+        return form
+
+    def edit_form(self, obj):
+        form = super(PostAdminView, self).edit_form(obj)
+        form.category_id.choices = [(c.id, c.name) for c in Category.query.order_by('name')]
+        form.author.choices = [(u.id, u.username) for u in User.query.order_by('username')]
+        return form
 
     def on_model_change(self, form, model, is_created):
         if is_created:
-            model.password = generate_password_hash('default123', method='pbkdf2:sha256')
+            model.author = current_user
 
-class PostAdminView(SecureModelView):
-    column_searchable_list = ['title', 'content']
-    column_filters = ['title', 'date_posted']
-    column_list = ['title', 'date_posted', 'content']
-    form_columns = ['title', 'content', 'user_id']
+class CategoryAdminForm(FlaskForm):
+    name = StringField('Name', validators=[DataRequired(), Length(max=100)])
+    description = TextAreaField('Description')
+
+class CategoryAdminView(SecureModelView):
+    column_list = ['name', 'description', 'posts']
+    column_searchable_list = ['name', 'description']
+    form = CategoryAdminForm
     column_labels = {
-        'user_id': 'Author',
-        'date_posted': 'Posted Date'
+        'name': 'Name',
+        'description': 'Description',
+        'posts': 'Posts'
     }
-    can_create = True
-    can_edit = True
-    can_delete = True
-    page_size = 50
+    
+    def on_model_change(self, form, model, is_created):
+        model.slug = slugify(model.name)
 
-    def _user_formatter(view, context, model, name):
-        if model.author:
-            return model.author.username
-        return ''
+class CommentAdminForm(FlaskForm):
+    content = TextAreaField('Content', validators=[DataRequired()])
 
+class CommentAdminView(SecureModelView):
+    column_list = ['content', 'created_at', 'post', 'author']
+    column_filters = ['content', 'created_at', 'post', 'author']
+    column_searchable_list = ['content']
+    column_labels = {
+        'created_at': 'Date Posted'
+    }
+    form_columns = ['content', 'post', 'author']
+
+class TagAdminForm(FlaskForm):
+    name = StringField('Name', validators=[DataRequired(), Length(max=50)])
+    description = TextAreaField('Description')
+
+class TagAdminView(SecureModelView):
+    column_list = ['name', 'description', 'slug']
+    column_filters = ['name']
+    column_searchable_list = ['name', 'description']
+    form = TagAdminForm
+
+    def on_model_change(self, form, model, is_created):
+        if not model.slug:
+            model.slug = slugify(model.name)
+
+class NewsletterAdminForm(FlaskForm):
+    email = EmailField('Email', validators=[DataRequired(), Email()])
+    is_confirmed = BooleanField('Confirmed')
+    token = StringField('Token', render_kw={'readonly': True})
+
+class NewsletterAdminView(SecureModelView):
+    column_list = ['email', 'is_confirmed', 'created_at']
+    column_searchable_list = ['email']
+    column_filters = ['is_confirmed', 'created_at']
+    form = NewsletterAdminForm
+    column_labels = {
+        'email': 'Email Address',
+        'is_confirmed': 'Confirmed',
+        'created_at': 'Subscribed On'
+    }
     column_formatters = {
-        'user_id': _user_formatter
+        'created_at': lambda v, c, m, p: m.created_at.strftime('%Y-%m-%d %H:%M:%S')
     }
 
     def on_model_change(self, form, model, is_created):
-        if is_created and not model.date_posted:
-            model.date_posted = datetime.utcnow()
-
-# Admin Category Form
-class AdminCategoryForm(FlaskForm):
-    name = StringField('Name', validators=[DataRequired(), Length(min=2, max=50)])
-    description = TextAreaField('Description', validators=[Length(max=200)])
-
-class CategoryAdminView(SecureModelView):
-    column_list = ['name', 'description']
-    form_columns = ['name', 'description']
-    
-    def create_form(self, obj=None):
-        return AdminCategoryForm(obj=obj)
-
-    def edit_form(self, obj=None):
-        return AdminCategoryForm(obj=obj)
-
-# Comment form
-class CommentForm(FlaskForm):
-    content = TextAreaField('Comment', validators=[DataRequired()])
-    parent_id = HiddenField('Parent Comment ID')
-    submit = SubmitField('Post Comment')
-
-# Comment routes
-@app.route("/post/<int:post_id>/comment", methods=['POST'])
-@login_required
-def add_comment(post_id):
-    try:
-        post = Post.query.get_or_404(post_id)
-        if post.status != 'published':
-            flash('Comments are not allowed on this post.', 'warning')
-            return redirect(url_for('post', post_id=post_id))
-            
-        form = CommentForm()
-        if form.validate_on_submit():
-            parent_id = form.parent_id.data if form.parent_id.data else None
-            comment = Comment(
-                content=form.content.data,
-                post_id=post_id,
-                user_id=current_user.id,
-                parent_id=parent_id
-            )
-            db.session.add(comment)
-            db.session.commit()
-            flash('Your comment has been added!', 'success')
-        else:
-            flash('There was an error with your comment. Please try again.', 'danger')
-    except Exception as e:
-        flash('An error occurred while adding your comment.', 'danger')
-        db.session.rollback()
-    return redirect(url_for('post', post_id=post_id))
-
-# Like/Unlike routes
-@app.route("/post/<int:post_id>/like", methods=['POST'])
-@login_required
-def like_post(post_id):
-    try:
-        post = Post.query.get_or_404(post_id)
-        if post.status != 'published':
-            return jsonify({'error': 'Cannot like this post'}), 403
-            
-        like = Like.query.filter_by(user_id=current_user.id, post_id=post_id).first()
-        
-        if like:
-            db.session.delete(like)
-            db.session.commit()
-            return jsonify({'status': 'unliked', 'likes': post.like_count})
-        else:
-            like = Like(user_id=current_user.id, post_id=post_id)
-            db.session.add(like)
-            db.session.commit()
-            return jsonify({'status': 'liked', 'likes': post.like_count})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'An error occurred'}), 500
-
-# Admin views for new models
-class CommentAdminView(SecureModelView):
-    column_list = ['content', 'author', 'post', 'created_at']
-    column_searchable_list = ['content']
-    column_filters = ['created_at', 'user_id', 'post_id']
-    can_create = True
-    can_edit = True
-    can_delete = True
-    page_size = 50
-
-# Admin view for tags
-class TagAdminView(SecureModelView):
-    column_list = ['name']
-    column_searchable_list = ['name']
-    can_create = True
-    can_edit = True
-    can_delete = True
-    page_size = 50
-
-# Admin view for newsletter
-class NewsletterAdminView(SecureModelView):
-    column_list = ['email', 'name', 'subscribed_at', 'is_active', 'is_confirmed']
-    column_searchable_list = ['email', 'name']
-    column_filters = ['is_active', 'is_confirmed']
-    can_create = False
-    can_edit = True
-    can_delete = True
-    page_size = 50
+        if is_created:
+            model.token = secrets.token_urlsafe(32)
 
 # Create admin interface
-admin = Admin(app, name='Blog Admin', template_mode='bootstrap4', index_view=MyAdminIndexView())
-admin.add_view(UserAdminView(User, db.session))
-admin.add_view(PostAdminView(Post, db.session))
-admin.add_view(CategoryAdminView(Category, db.session))
-admin.add_view(CommentAdminView(Comment, db.session))
-admin.add_view(TagAdminView(Tag, db.session))
-admin.add_view(NewsletterAdminView(Newsletter, db.session))
+admin = Admin(
+    app, 
+    name='Flask Blog Admin', 
+    template_mode='bootstrap4',
+    index_view=MyAdminIndexView()
+)
+admin.add_view(UserAdminView(User, db.session, name='Users'))
+admin.add_view(PostAdminView(Post, db.session, name='Posts'))
+admin.add_view(CategoryAdminView(Category, db.session, name='Categories'))
+admin.add_view(CommentAdminView(Comment, db.session, name='Comments'))
+admin.add_view(TagAdminView(Tag, db.session, name='Tags'))
+admin.add_view(NewsletterAdminView(Newsletter, db.session, name='Newsletter'))
 
 @app.route("/make_admin/<int:user_id>")
 @admin_required
@@ -970,6 +989,7 @@ with app.app_context():
     for tag_name in default_tags:
         if not Tag.query.filter_by(name=tag_name).first():
             tag = Tag(name=tag_name)
+            tag.slug = slugify(tag_name)
             db.session.add(tag)
     
     db.session.commit()
