@@ -1,9 +1,12 @@
 __pycache__/
-
+.env
+.venv
 pip-log.txt
 pip-delete-this-directory.txt
 .cache
 local_settings.py
+db.sqlite3
+db.sqlite3-journal
 ipython_config.py
 Pipfile.lock
 Pipfile
