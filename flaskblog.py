@@ -496,6 +496,37 @@ def post(post_id):
         flash('An unexpected error occurred while loading the post. Please try again later.', 'danger')
         return redirect(url_for('home'))
 
+@app.route("/post/<int:post_id>/comment", methods=['POST'])
+@login_required
+def add_comment(post_id):
+    post = Post.query.get_or_404(post_id)
+    form = CommentForm() # request.form is automatically passed by Flask-WTF
+    if form.validate_on_submit():
+        parent_id_val = form.parent_id.data
+        # Ensure parent_id is an integer if provided, otherwise None
+        parent_id = int(parent_id_val) if parent_id_val and parent_id_val.isdigit() else None
+
+        comment = Comment(
+            content=form.content.data,
+            user_id=current_user.id,
+            post_id=post.id,
+            parent_id=parent_id
+        )
+        db.session.add(comment)
+        db.session.commit()
+        flash('Your comment has been posted!', 'success')
+    else:
+        # Flash form-specific errors or a generic one
+        if form.errors:
+            for field, error_list in form.errors.items():
+                for error in error_list:
+                    flash(f"Error in {getattr(form, field).label.text if hasattr(getattr(form, field), 'label') else field}: {error}", 'danger')
+        else:
+            flash('Error posting comment. Please check your input.', 'danger')
+
+    return redirect(url_for('post', post_id=post.id, _anchor='comments-section')) # Redirect to the comments section
+
+
 @app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
 @login_required
 def update_post(post_id):
