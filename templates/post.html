@@ -36,6 +36,7 @@
                         </a>
                     {% endif %}
                 </div>
+                <div id="like-error-message" class="text-danger small mt-1"></div>
                 
                 <!-- Post Tags -->
                 <div class="post-tags mt-3">
@@ -195,10 +196,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}' // Assuming you have CSRF token available like this
                 },
             })
-            .then(response => response.json())
+            .then(response => {
+                clearLikeError(); // Clear previous errors
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw { status: response.status, data: errData };
+                    }).catch(() => {
+                        // If parsing error data fails or no JSON body
+                        throw { status: response.status, data: { message: 'Server error. Please try again.' } };
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
+                if (data.error) { // Handle application-specific errors if returned in a 2xx response
+                    displayLikeError(data.error);
+                    return;
+                }
                 const likeCount = this.querySelector('.like-count');
                 likeCount.textContent = data.likes;
                 if (data.status === 'liked') {
@@ -209,8 +226,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.classList.add('btn-outline-danger');
                 }
             })
-            .catch(error => console.error('Error:', error));
+            .catch(error => {
+                clearLikeError(); // Clear previous errors before showing a new one
+                if (error.status) {
+                    // Handle HTTP errors (e.g., 403, 404, 500)
+                    const message = error.data && error.data.message ? error.data.message : `Error ${error.status}: An unexpected server error occurred.`;
+                    displayLikeError(message);
+                } else {
+                    // Handle network errors or other fetch issues
+                    console.error('Fetch Error:', error);
+                    displayLikeError('Network error or request failed. Please check your connection.');
+                }
+            });
         });
+    }
+
+    function displayLikeError(message) {
+        const errorDiv = document.getElementById('like-error-message');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            // Clear the error message after 5 seconds
+            setTimeout(() => {
+                if (errorDiv.textContent === message) { // Only clear if the message hasn't changed
+                    errorDiv.textContent = '';
+                }
+            }, 5000);
+        }
+    }
+
+    function clearLikeError() {
+        const errorDiv = document.getElementById('like-error-message');
+        if (errorDiv) {
+            errorDiv.textContent = '';
+        }
     }
 
     // Reply button functionality
