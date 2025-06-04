@@ -95,6 +95,7 @@
                     {% else %}
                         {{ form.picture(class="form-control-file") }}
                     {% endif %}
+                    <img id="image-preview" src="#" alt="Image Preview" style="display:none; max-width: 200px; margin-top: 10px; border-radius: 5px;">
                 </div>
             </fieldset>
             <div class="form-group">
@@ -105,6 +106,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Existing script for publish date
             const statusSelect = document.querySelector('#status');
             const publishDateGroup = document.querySelector('#publish-date-group');
             
@@ -118,6 +120,128 @@
             
             statusSelect.addEventListener('change', togglePublishDate);
             togglePublishDate(); // Initial state
+
+            // Form validation script
+            const form = document.querySelector('form');
+            const titleInput = document.querySelector('#title');
+            const contentInput = document.querySelector('#content');
+            const pictureInput = document.querySelector('#picture'); // Assuming the id is 'picture' based on form.picture
+
+            // Max file size (2MB)
+            const MAX_FILE_SIZE = 2 * 1024 * 1024;
+            // Allowed file types
+            const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
+
+            // Image preview
+            const imagePreview = document.getElementById('image-preview');
+            if (pictureInput && imagePreview) {
+                pictureInput.addEventListener('change', function() {
+                    const file = this.files[0];
+                    if (file) {
+                        // Check if the file type is an image for client-side preview
+                        if (file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                imagePreview.src = e.target.result;
+                                imagePreview.style.display = 'block';
+                            }
+                            reader.onerror = function() {
+                                imagePreview.src = '#';
+                                imagePreview.style.display = 'none';
+                                console.error('Error reading the image file for preview.');
+                                // Optionally, show a small error message to the user here
+                            }
+                            reader.readAsDataURL(file);
+                        } else {
+                            // Not an image file, clear preview and optionally inform user
+                            imagePreview.src = '#';
+                            imagePreview.style.display = 'none';
+                            // You might want to use the showError function for the pictureInput here
+                            // but be careful not to override other validation messages prematurely.
+                            // For now, just console log.
+                            console.warn('Selected file is not an image, preview not available.');
+                        }
+                    } else {
+                        imagePreview.src = '#';
+                        imagePreview.style.display = 'none';
+                    }
+                });
+            }
+
+            form.addEventListener('submit', function(event) {
+                let isValid = true;
+
+                // Reset previous errors
+                clearError(titleInput);
+                clearError(contentInput);
+                clearError(pictureInput);
+
+                // Validate Title
+                if (titleInput.value.trim() === '') {
+                    showError(titleInput, 'Title is required.');
+                    isValid = false;
+                } else if (titleInput.value.trim().length < 5) {
+                    showError(titleInput, 'Title must be at least 5 characters long.');
+                    isValid = false;
+                } else if (titleInput.value.trim().length > 100) {
+                    showError(titleInput, 'Title must be less than 100 characters long.');
+                    isValid = false;
+                }
+
+                // Validate Content
+                if (contentInput.value.trim() === '') {
+                    showError(contentInput, 'Content is required.');
+                    isValid = false;
+                } else if (contentInput.value.trim().length < 20) {
+                    showError(contentInput, 'Content must be at least 20 characters long.');
+                    isValid = false;
+                }
+
+                // Validate Picture
+                if (pictureInput.files.length > 0) {
+                    const file = pictureInput.files[0];
+                    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+                        showError(pictureInput, 'Invalid file type. Allowed types: jpg, png, gif.');
+                        isValid = false;
+                    }
+                    if (file.size > MAX_FILE_SIZE) {
+                        showError(pictureInput, 'File size exceeds 2MB limit.');
+                        isValid = false;
+                    }
+                }
+
+                if (!isValid) {
+                    event.preventDefault(); // Prevent form submission if validation fails
+                } else {
+                    // Optionally, you can add a loading spinner or disable the submit button here
+                    // before the form is programmatically submitted.
+                    form.submit(); // Submit the form if all validations pass
+                }
+            });
+
+            function showError(inputElement, message) {
+                inputElement.classList.add('is-invalid');
+                let errorDiv = inputElement.nextElementSibling;
+                if (!errorDiv || !errorDiv.classList.contains('invalid-feedback')) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.classList.add('invalid-feedback');
+                    inputElement.parentNode.insertBefore(errorDiv, inputElement.nextSibling);
+                }
+                // Ensure existing server-side errors are cleared or integrated
+                errorDiv.innerHTML = `<span>${message}</span>`;
+            }
+
+            function clearError(inputElement) {
+                inputElement.classList.remove('is-invalid');
+                let errorDiv = inputElement.nextElementSibling;
+                // Only remove if it's a dynamically added client-side error message container
+                // Server-side errors might be structured differently or might be preferred to persist
+                // until a successful server validation.
+                // For simplicity, this example clears any 'invalid-feedback' div next to the input.
+                if (errorDiv && errorDiv.classList.contains('invalid-feedback')) {
+                    errorDiv.innerHTML = ''; // Clear message to allow server errors to repopulate if needed
+                }
+            }
         });
     </script>
 {% endblock content %} 

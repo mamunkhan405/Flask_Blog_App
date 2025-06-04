@@ -1,5 +1,6 @@
 from flask import Flask, render_template, url_for, flash, redirect, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
 from flask_login import LoginManager, UserMixin, login_user, current_user, logout_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf import FlaskForm, CSRFProtect
@@ -8,7 +9,7 @@ from wtforms import StringField, PasswordField, SubmitField, TextAreaField, Bool
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional
 import os
 import secrets
-from PIL import Image
+from PIL import Image, UnidentifiedImageError as PillowUnidentifiedImageError # Import with alias
 from datetime import datetime
 from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
@@ -298,13 +299,30 @@ def save_post_image(form_picture):
     picture_fn = random_hex + f_ext
     picture_path = os.path.join(app.root_path, 'static/post_pics', picture_fn)
     
-    # Resize the image
     output_size = (800, 800)
-    i = Image.open(form_picture)
-    i.thumbnail(output_size)
-    i.save(picture_path)
-    
-    return picture_fn
+    try:
+        i = Image.open(form_picture)
+    except PillowUnidentifiedImageError: # More specific error for invalid image format
+        return None, "Invalid image file: The provided file is not a recognized image format."
+    except IOError:
+        return None, "Invalid image file: Could not open or read the image."
+    except Exception as e: # Catch other Pillow related errors during open
+        app.logger.error(f"Pillow Image.open error: {e}")
+        return None, "An error occurred while trying to open the image."
+
+    try:
+        i.thumbnail(output_size)
+    except Exception as e:
+        app.logger.error(f"Pillow thumbnail error: {e}")
+        return None, "Failed to resize image. The image might be corrupted or in an unsupported format."
+
+    try:
+        i.save(picture_path)
+    except Exception as e:
+        app.logger.error(f"Pillow save error: {e}")
+        return None, "Failed to save image. Please try again later."
+
+    return picture_fn, None
 
 def get_sidebar_data():
     total_posts = Post.query.filter_by(status='published').count()
@@ -405,12 +423,23 @@ def account():
 def new_post():
     form = PostForm()
     if form.validate_on_submit():
-        image_file = None
+        image_filename_to_save = None
         if form.picture.data:
-            image_file = save_post_image(form.picture.data)
+            saved_image_info = save_post_image(form.picture.data)
+            if saved_image_info[0]: # Filename is present, success
+                image_filename_to_save = saved_image_info[0]
+            else: # Error occurred
+                flash(f"Image upload failed: {saved_image_info[1]}", 'danger')
+                return render_template('create_post.html', title='New Post', form=form, legend='New Post', **get_sidebar_data())
         
         post = Post(
             title=form.title.data,
+            content=form.content.data,
+            author=current_user,
+            image_file=image_filename_to_save, # Use the potentially updated filename
+            category_id=form.category.data,
+            status=form.status.data
+        )
             content=form.content.data,
             author=current_user,
             image_file=image_file,
@@ -456,8 +485,15 @@ def post(post_id):
                              post=post, 
                              form=form,
                              **get_sidebar_data())
+    except SQLAlchemyError as db_err:
+        app.logger.error(f"Database error displaying post {post_id}: {db_err}")
+        db.session.rollback() # Rollback the session in case of db error
+        flash('A database error occurred while trying to load the post. Please try again later.', 'danger')
+        return redirect(url_for('home'))
     except Exception as e:
-        flash('An error occurred while loading the post.', 'danger')
+        # Log the specific post_id and exception for better debugging
+        app.logger.error(f"Unexpected error displaying post {post_id}: {e}", exc_info=True)
+        flash('An unexpected error occurred while loading the post. Please try again later.', 'danger')
         return redirect(url_for('home'))
 
 @app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
@@ -469,11 +505,23 @@ def update_post(post_id):
     form = PostForm()
     if form.validate_on_submit():
         if form.picture.data:
-            if post.image_file:
-                old_image_path = os.path.join(app.root_path, 'static/post_pics', post.image_file)
-                if os.path.exists(old_image_path):
-                    os.remove(old_image_path)
-            post.image_file = save_post_image(form.picture.data)
+            saved_image_info = save_post_image(form.picture.data)
+            if saved_image_info[0]: # Filename is present, success
+                # Delete old image if it exists and new one is successfully saved
+                if post.image_file:
+                    old_image_path = os.path.join(app.root_path, 'static/post_pics', post.image_file)
+                    if os.path.exists(old_image_path):
+                        try:
+                            os.remove(old_image_path)
+                        except Exception as e:
+                            app.logger.error(f"Error deleting old post image {post.image_file}: {e}")
+                post.image_file = saved_image_info[0]
+            else: # Error occurred during new image save
+                flash(f"Image upload failed: {saved_image_info[1]}", 'danger')
+                # It's important to repopulate choices or any dynamic data if re-rendering
+                form.category.choices = [(c.id, c.name) for c in Category.query.order_by('name')]
+                return render_template('create_post.html', title='Update Post', form=form, legend='Update Post', **get_sidebar_data())
+
         post.title = form.title.data
         post.content = form.content.data
         post.category_id = form.category.data
@@ -498,8 +546,12 @@ def update_post(post_id):
         form.title.data = post.title
         form.content.data = post.content
         form.category.data = post.category_id
+        form.status.data = post.status # Ensure status is pre-filled
+        form.publish_date.data = post.publish_date if post.publish_date else None # Ensure publish_date is pre-filled
         # Set existing tags
         form.tags.data = ', '.join([tag.name for tag in post.tags])
+    # Ensure choices are populated for GET request as well
+    form.category.choices = [(c.id, c.name) for c in Category.query.order_by('name')]
     return render_template('create_post.html', title='Update Post',
                          form=form, legend='Update Post', **get_sidebar_data())
 
@@ -970,9 +1022,11 @@ with app.app_context():
             db.session.add(category)
     
     # Create admin user if it doesn't exist
-    admin_email = 'admin@gmail.com'
+    admin_email = os.environ.get('ADMIN_EMAIL', 'admin@example.com') # Use environment variable or default
+    admin_password_plain = os.environ.get('ADMIN_PASSWORD', 'admin123') # Use environment variable or default
+
     if not User.query.filter_by(email=admin_email).first():
-        admin_password = generate_password_hash('admin123', method='pbkdf2:sha256')
+        admin_password = generate_password_hash(admin_password_plain, method='pbkdf2:sha256')
         admin = User(
             username='admin',
             email=admin_email,
