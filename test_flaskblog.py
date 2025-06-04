@@ -8,8 +8,8 @@ from sqlalchemy.exc import SQLAlchemyError
 import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from flask import url_for # Added for use in assertions
-from flaskblog import app, db, User, Post, Category, Comment # Added Comment model
+from flask import url_for, jsonify # Added for use in assertions
+from flaskblog import app, db, User, Post, Category, Comment, Like # Added Like model
 from flaskblog import save_post_image # Ensure this is importable
 from PIL import Image, UnidentifiedImageError as PillowUnidentifiedImageError
 from werkzeug.datastructures import FileStorage # For mocking file uploads, used in other tests
@@ -395,4 +395,205 @@ if __name__ == '__main__':
 
         comment_count = Comment.query.filter_by(post_id=test_post.id).count()
         self.assertEqual(comment_count, 0)
+        self.logout()
+
+    # --------------------------------------------------
+    # SECTION 6: Tests for like_post functionality
+    # --------------------------------------------------
+
+    def test_like_post_success(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Like Test Post", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('like_post', post_id=test_post.id))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.is_json)
+        json_data = response.get_json()
+        self.assertEqual(json_data['status'], 'liked')
+        self.assertEqual(json_data['likes'], 1)
+
+        like = Like.query.filter_by(user_id=user.id, post_id=test_post.id).first()
+        self.assertIsNotNone(like)
+        self.logout()
+
+    def test_unlike_post_success(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Unlike Test Post", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        # Manually create a like
+        like = Like(user_id=user.id, post_id=test_post.id)
+        db.session.add(like)
+        db.session.commit()
+
+        # Now, POST to like_post should unlike it
+        response = self.app.post(url_for('like_post', post_id=test_post.id))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.is_json)
+        json_data = response.get_json()
+        self.assertEqual(json_data['status'], 'unliked')
+        self.assertEqual(json_data['likes'], 0)
+
+        like_after_unlike = Like.query.filter_by(user_id=user.id, post_id=test_post.id).first()
+        self.assertIsNone(like_after_unlike)
+        self.logout()
+
+    def test_like_post_not_logged_in(self):
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Like Auth Test", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('like_post', post_id=test_post.id), follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(url_for('login')))
+
+        like_count = Like.query.filter_by(post_id=test_post.id).count()
+        self.assertEqual(like_count, 0)
+
+    def test_like_post_nonexistent_post(self):
+        self.login('test@example.com', 'password')
+        response = self.app.post(url_for('like_post', post_id=9999)) # Non-existent post ID
+        self.assertEqual(response.status_code, 404)
+        self.logout()
+
+    @patch('flaskblog.db.session.commit', side_effect=SQLAlchemyError("Simulated DB error for like"))
+    @patch('flaskblog.db.session.rollback') # To verify rollback is called
+    @patch('flaskblog.app.logger.error') # To verify error is logged
+    def test_like_post_database_error_scenario(self, mock_logger_error, mock_db_rollback, mock_db_commit):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Like DB Error Test", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit() # Initial commit for post creation
+
+        # The mocked db.session.commit will be called inside like_post
+        response = self.app.post(url_for('like_post', post_id=test_post.id))
+
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(response.is_json)
+        json_data = response.get_json()
+        self.assertEqual(json_data['status'], 'error')
+        self.assertEqual(json_data['message'], 'A database error occurred.')
+
+        mock_db_commit.assert_called_once() # Assert our mocked commit was called
+        mock_db_rollback.assert_called_once() # Assert rollback was called due to error
+        mock_logger_error.assert_called_once() # Assert logger was called
+        self.assertIn(f"Database error during like/unlike for post {test_post.id}", mock_logger_error.call_args[0][0])
+
+        # Ensure no like was persisted if the commit failed
+        # If it was a 'like' attempt, the count should be 0.
+        # If it was an 'unlike' attempt (meaning a like existed), the count would remain 1 if rollback was effective.
+        # For simplicity, this test assumes the action was a 'like' attempt that failed.
+        like_on_db = Like.query.filter_by(user_id=user.id, post_id=test_post.id).first()
+        self.assertIsNone(like_on_db, "Like should have been rolled back and not persisted.")
+        self.logout()
+
+    # --------------------------------------------------
+    # SECTION 6: Tests for like_post functionality
+    # --------------------------------------------------
+
+    def test_like_post_success(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Like Test Post", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('like_post', post_id=test_post.id))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.is_json)
+        json_data = response.get_json()
+        self.assertEqual(json_data['status'], 'liked')
+        self.assertEqual(json_data['likes'], 1)
+
+        like = Like.query.filter_by(user_id=user.id, post_id=test_post.id).first()
+        self.assertIsNotNone(like)
+        self.logout()
+
+    def test_unlike_post_success(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Unlike Test Post", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        # Manually create a like
+        like = Like(user_id=user.id, post_id=test_post.id)
+        db.session.add(like)
+        db.session.commit()
+
+        # Now, POST to like_post should unlike it
+        response = self.app.post(url_for('like_post', post_id=test_post.id))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.is_json)
+        json_data = response.get_json()
+        self.assertEqual(json_data['status'], 'unliked')
+        self.assertEqual(json_data['likes'], 0)
+
+        like_after_unlike = Like.query.filter_by(user_id=user.id, post_id=test_post.id).first()
+        self.assertIsNone(like_after_unlike)
+        self.logout()
+
+    def test_like_post_not_logged_in(self):
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Like Auth Test", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('like_post', post_id=test_post.id), follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(url_for('login')))
+
+        like_count = Like.query.filter_by(post_id=test_post.id).count()
+        self.assertEqual(like_count, 0)
+
+    def test_like_post_nonexistent_post(self):
+        self.login('test@example.com', 'password')
+        response = self.app.post(url_for('like_post', post_id=9999)) # Non-existent post ID
+        self.assertEqual(response.status_code, 404)
+        self.logout()
+
+    @patch('flaskblog.db.session.commit', side_effect=SQLAlchemyError("Simulated DB error for like"))
+    @patch('flaskblog.db.session.rollback') # To verify rollback is called
+    @patch('flaskblog.app.logger.error') # To verify error is logged
+    def test_like_post_database_error_scenario(self, mock_logger_error, mock_db_rollback, mock_db_commit):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Like DB Error Test", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit() # Initial commit for post creation
+
+        # The mocked db.session.commit will be called inside like_post
+        response = self.app.post(url_for('like_post', post_id=test_post.id))
+
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(response.is_json)
+        json_data = response.get_json()
+        self.assertEqual(json_data['status'], 'error')
+        self.assertEqual(json_data['message'], 'A database error occurred.')
+
+        mock_db_commit.assert_called_once() # Assert our mocked commit was called
+        mock_db_rollback.assert_called_once() # Assert rollback was called due to error
+        mock_logger_error.assert_called_once() # Assert logger was called
+        self.assertIn(f"Database error during like/unlike for post {test_post.id}", mock_logger_error.call_args[0][0])
+
+        # Ensure no like was persisted if the commit failed
+        like_count = Like.query.filter_by(post_id=test_post.id).count()
+        self.assertEqual(like_count, 0)
         self.logout()
