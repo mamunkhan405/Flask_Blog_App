@@ -499,6 +499,16 @@ def add_comment(post_id):
         # Ensure parent_id is an integer if provided, otherwise None
         parent_id = int(parent_id_val) if parent_id_val and parent_id_val.isdigit() else None
 
+@app.route("/post/<int:post_id>/comment", methods=['POST'])
+@login_required
+def add_comment(post_id):
+    post = Post.query.get_or_404(post_id)
+    form = CommentForm() # request.form is automatically passed by Flask-WTF
+    if form.validate_on_submit():
+        parent_id_val = form.parent_id.data
+        # Ensure parent_id is an integer if provided, otherwise None
+        parent_id = int(parent_id_val) if parent_id_val and parent_id_val.isdigit() else None
+
         comment = Comment(
             content=form.content.data,
             user_id=current_user.id,
@@ -518,6 +528,8 @@ def add_comment(post_id):
             flash('Error posting comment. Please check your input.', 'danger')
 
     return redirect(url_for('post', post_id=post.id, _anchor='comments-section')) # Redirect to the comments section
+
+
 @app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
 @login_required
 def update_post(post_id):

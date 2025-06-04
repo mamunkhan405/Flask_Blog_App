@@ -8,9 +8,11 @@ from sqlalchemy.exc import SQLAlchemyError
 import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from flaskblog import app, db, User, Post, Category
+from flask import url_for # Added for use in assertions
+from flaskblog import app, db, User, Post, Category, Comment # Added Comment model
 from flaskblog import save_post_image # Ensure this is importable
 from PIL import Image, UnidentifiedImageError as PillowUnidentifiedImageError
+from werkzeug.datastructures import FileStorage # For mocking file uploads, used in other tests
 
 
 class FlaskBlogTestCase(unittest.TestCase):
@@ -284,11 +286,113 @@ class FlaskBlogTestCase(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # Import url_for here or make it globally available if needed for tests outside Flask context
-    from flask import url_for
-    # Ensure FileStorage is available for type hinting if needed
-    from werkzeug.datastructures import FileStorage
     unittest.main()
 
 # Note: Conceptual tests for client-side JS validation would be described separately
 # as they are not implemented in this Python unit test file.
+
+
+    # --------------------------------------------------
+    # SECTION 5: Tests for add_comment functionality
+    # --------------------------------------------------
+
+    def test_add_comment_success(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+
+        # Create a test post
+        test_post = Post(title="Comment Test Post", content="Some content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('add_comment', post_id=test_post.id), data={
+            'content': 'This is a test comment'
+            # parent_id is not provided for a top-level comment
+        }, follow_redirects=False) # Test redirect explicitly
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(url_for('post', post_id=test_post.id, _anchor='comments-section')))
+
+        flashed_messages = self.get_flashed_messages_dict()
+        self.assertIn('Your comment has been posted!', flashed_messages)
+
+        comment = Comment.query.filter_by(post_id=test_post.id, user_id=user.id).first()
+        self.assertIsNotNone(comment)
+        self.assertEqual(comment.content, 'This is a test comment')
+        self.assertIsNone(comment.parent_id)
+        self.logout()
+
+    def test_add_reply_success(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+
+        test_post = Post(title="Reply Test Post", content="Content for reply", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        parent_comment = Comment(content="Parent comment", user_id=user.id, post_id=test_post.id)
+        db.session.add(parent_comment)
+        db.session.commit()
+
+        response = self.app.post(url_for('add_comment', post_id=test_post.id), data={
+            'content': 'This is a test reply',
+            'parent_id': str(parent_comment.id) # Ensure parent_id is sent as string, like form data
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(url_for('post', post_id=test_post.id, _anchor='comments-section')))
+
+        flashed_messages = self.get_flashed_messages_dict()
+        self.assertIn('Your comment has been posted!', flashed_messages)
+
+        reply = Comment.query.filter_by(content='This is a test reply').first()
+        self.assertIsNotNone(reply)
+        self.assertEqual(reply.user_id, user.id)
+        self.assertEqual(reply.post_id, test_post.id)
+        self.assertEqual(reply.parent_id, parent_comment.id)
+        self.logout()
+
+    def test_add_comment_not_logged_in(self):
+        user = User.query.filter_by(email='test@example.com').first() # User exists but not logged in
+        category = Category.query.first()
+        test_post = Post(title="Auth Test Post", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('add_comment', post_id=test_post.id), data={
+            'content': 'Attempting comment while not logged in'
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(url_for('login'))) # Should redirect to login
+
+        comment_count = Comment.query.filter_by(post_id=test_post.id).count()
+        self.assertEqual(comment_count, 0)
+
+    def test_add_comment_empty_content(self):
+        self.login('test@example.com', 'password')
+        user = User.query.filter_by(email='test@example.com').first()
+        category = Category.query.first()
+        test_post = Post(title="Validation Test Post", content="Content", author=user, category_id=category.id)
+        db.session.add(test_post)
+        db.session.commit()
+
+        response = self.app.post(url_for('add_comment', post_id=test_post.id), data={
+            'content': '' # Empty content
+        }, follow_redirects=False) # Check redirect and flashed message before redirect
+
+        self.assertEqual(response.status_code, 302) # Should still redirect to post page
+        self.assertTrue(response.location.endswith(url_for('post', post_id=test_post.id, _anchor='comments-section')))
+
+        flashed_messages = self.get_flashed_messages_dict()
+        # Based on the add_comment implementation, it flashes specific field errors
+        self.assertIn("Error in Content: This field is required.", flashed_messages)
+        # Or a more generic one if specific field detection fails in test / form setup
+        # self.assertIn('Error posting comment. Please check your input.', flashed_messages)
+
+
+        comment_count = Comment.query.filter_by(post_id=test_post.id).count()
+        self.assertEqual(comment_count, 0)
+        self.logout()
