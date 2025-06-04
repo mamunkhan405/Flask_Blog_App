@@ -61,11 +61,11 @@
             {% if current_user.is_authenticated %}
                 <form method="POST" action="{{ url_for('add_comment', post_id=post.id) }}" class="mb-4">
                     {{ form.hidden_tag() }}
-                    <div class="form-group">
+                    <div class="mb-3">
                         {{ form.content(class="form-control", placeholder="Write a comment...") }}
                         {{ form.parent_id }}
                     </div>
-                    <div class="form-group mt-2">
+                    <div class="mb-3 mt-2">
                         {{ form.submit(class="btn btn-outline-info") }}
                     </div>
                 </form>
@@ -96,11 +96,11 @@
                             <div id="reply-form-{{ comment.id }}" class="mt-3" style="display: none;">
                                 <form method="POST" action="{{ url_for('add_comment', post_id=post.id) }}" class="mb-3">
                                     {{ form.hidden_tag() }}
-                                    <div class="form-group">
+                                    <div class="mb-3">
                                         {{ form.content(class="form-control", placeholder="Write a reply...", rows="2") }}
                                         <input type="hidden" name="parent_id" value="{{ comment.id }}">
                                     </div>
-                                    <div class="form-group mt-2">
+                                    <div class="mb-3 mt-2">
                                         <button type="submit" class="btn btn-primary btn-sm">Reply</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm cancel-reply" data-comment-id="{{ comment.id }}">Cancel</button>
                                     </div>

@@ -12,8 +12,8 @@
             {{ form.hidden_tag() }}
             <fieldset class="form-group">
                 <legend class="border-bottom mb-4">Account Info</legend>
-                <div class="form-group">
-                    {{ form.username.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.username.label(class="form-label") }}
                     {% if form.username.errors %}
                         {{ form.username(class="form-control form-control-lg is-invalid") }}
                         <div class="invalid-feedback">
@@ -25,8 +25,8 @@
                         {{ form.username(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
-                <div class="form-group">
-                    {{ form.email.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.email.label(class="form-label") }}
                     {% if form.email.errors %}
                         {{ form.email(class="form-control form-control-lg is-invalid") }}
                         <div class="invalid-feedback">
@@ -38,9 +38,9 @@
                         {{ form.email(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
-                <div class="form-group">
-                    {{ form.picture.label() }}
-                    {{ form.picture(class="form-control-file") }}
+                <div class="mb-3">
+                    {{ form.picture.label(class="form-label") }}
+                    {{ form.picture(class="form-control") }}
                     {% if form.picture.errors %}
                         {% for error in form.picture.errors %}
                             <span class="text-danger">{{ error }}</span><br>
@@ -50,28 +50,28 @@
             </fieldset>
             <fieldset class="form-group">
                 <legend class="border-bottom mb-4">Profile Info</legend>
-                <div class="form-group">
-                    {{ form.bio.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.bio.label(class="form-label") }}
                     {{ form.bio(class="form-control form-control-lg") }}
                 </div>
-                <div class="form-group">
-                    {{ form.location.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.location.label(class="form-label") }}
                     {{ form.location(class="form-control form-control-lg") }}
                 </div>
-                <div class="form-group">
-                    {{ form.website.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.website.label(class="form-label") }}
                     {{ form.website(class="form-control form-control-lg", placeholder="https://example.com") }}
                 </div>
-                <div class="form-group">
-                    {{ form.twitter.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.twitter.label(class="form-label") }}
                     {{ form.twitter(class="form-control form-control-lg", placeholder="username (without @)") }}
                 </div>
-                <div class="form-group">
-                    {{ form.github.label(class="form-control-label") }}
+                <div class="mb-3">
+                    {{ form.github.label(class="form-label") }}
                     {{ form.github(class="form-control form-control-lg", placeholder="username") }}
                 </div>
             </fieldset>
-            <div class="form-group">
+            <div class="mb-3">
                 {{ form.submit(class="btn btn-outline-info") }}
             </div>
         </form>
