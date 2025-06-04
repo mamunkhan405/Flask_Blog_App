@@ -474,6 +474,14 @@ def post(post_id):
         db.session.commit()
         
         form = CommentForm()
+
+        # Debug logging for add_comment URL generation
+        try:
+            test_url = url_for('add_comment', post_id=post.id)
+            app.logger.debug(f"Successfully built URL for add_comment in view function: {test_url}")
+        except Exception as e:
+            app.logger.error(f"Failed to build URL for add_comment in view function for post {post.id}: {e}", exc_info=True)
+
         return render_template('post.html', 
                              title=post.title, 
                              post=post, 
@@ -528,6 +536,30 @@ def add_comment(post_id):
             flash('Error posting comment. Please check your input.', 'danger')
 
     return redirect(url_for('post', post_id=post.id, _anchor='comments-section')) # Redirect to the comments section
+
+@app.route("/post/<int:post_id>/like", methods=['POST'])
+@login_required
+def like_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    existing_like = Like.query.filter_by(user_id=current_user.id, post_id=post.id).first()
+
+    if existing_like:
+        db.session.delete(existing_like)
+        status = 'unliked'
+    else:
+        new_like = Like(user_id=current_user.id, post_id=post.id)
+        db.session.add(new_like)
+        status = 'liked'
+
+    try:
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"Database error during like/unlike for post {post_id} by user {current_user.id}: {e}")
+        return jsonify({'status': 'error', 'message': 'A database error occurred.'}), 500
+
+    like_count = post.like_count # Recalculate or rely on relationship update
+    return jsonify({'status': status, 'likes': like_count})
 
 
 @app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
